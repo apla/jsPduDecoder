@@ -189,6 +189,182 @@ function tokenizer( octets ) {
     return tokenList;
 }
 
+/**
+ * Actual implementation of a PDU decoder. Decodes all information defined in
+ * {@linkplain http://www.dreamfabric.com/sms/} and {@linkplain http://mobiletidings.com/}
+ *
+ * @param {string} pdu Contains the PDU decoded SMS
+ * @return {Object} Decoded information from PDU
+ * @throws {Error} Invalid PDU string
+ */
+function pduDestructure( pdu ) {
+    var i;
+
+    var octets = splitter( pdu );
+
+    if (!octets) {
+        return "Invalid PDU String!";
+    }
+
+    var result = parser( octets );
+
+    return result;
+}
+
+/**
+ * Analyses the PDU octets and returns a PDU internal structures.
+ *
+ * @param {Array<string>} octets
+ * @return {Object} PDU structure
+ */
+function parser( octets ) {
+    var result = {};
+    var pos;
+    var numberLength;
+    var sliceNumber;
+    var sliceNumberToA;
+    var numberToA;
+    var TP_PID;
+    var TP_DCS;
+
+    // SMS Center part
+    var smscLength = parseInt( octets[0], 16 );
+
+    if (smscLength) {
+        var sliceSmsc = octets.slice( 2, smscLength + 1 );
+        var sliceSmscToA = octets[1];
+        var smscToA = tokens.ToA( sliceSmscToA );
+        result.SMSC = {
+            number: tokens.Number( sliceSmsc, undefined, smscToA ),
+            ToA: smscToA,
+        };
+    }
+
+    // Sender/Receiver part
+    pos = smscLength + 1;
+    var pduType = result.ToM = tokens.ToM( octets[ pos ] );
+
+    if (pduType.type === 'deliver') {
+        pos++;
+        numberLength = parseInt( octets[ pos ], 16 );
+
+        pos++;
+        if (numberLength) {
+            sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
+            sliceNumberToA = octets[ pos ];
+            numberToA = tokens.ToA( sliceNumberToA );
+            result.address = {
+                number: tokens.Number( sliceNumber, numberLength, numberToA ),
+                ToA: numberToA,
+            };
+
+            pos += 1 + Math.ceil( numberLength / 2 );
+        }
+
+        TP_PID = octets[ pos ];
+        result.PID = tokens.PID( TP_PID );
+
+        pos++;
+        TP_DCS = tokens.DCS( octets[ pos ] );
+        result.DCS = tokens.DCS( octets[ pos ] );
+
+        pos++;
+        var sliceTimeStamp = octets.slice( pos, pos + 7 );
+        result.SCTS = tokens.SCTS( sliceTimeStamp );
+
+        pos += 6;
+    }
+    else if (pduType.type === 'submit') {
+        pos++;
+        var MR = octets[ pos ];
+        result.MR = tokens.MR( MR );
+
+        pos++;
+        numberLength = parseInt( octets[ pos ], 16 );
+
+        pos++;
+        if (numberLength) {
+            sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
+            sliceNumberToA = octets[ pos ];
+            numberToA = tokens.ToA( sliceNumberToA );
+            // TP-DA
+            result.address = {
+                number: tokens.Number( sliceNumber, numberLength, numberToA ),
+                ToA: numberToA,
+            };
+
+            pos += 1 + Math.ceil( numberLength / 2 );
+        }
+
+        TP_PID = octets[ pos ];
+        result.PID = tokens.PID( TP_PID );
+
+        pos++;
+        TP_DCS = tokens.DCS( octets[ pos ] );
+        result.DCS = tokens.DCS( octets[ pos ] );
+        
+        if (pduType.TP_VPF) {
+            pos++;
+            var sliceVP;
+            if (pduType.TP_VPF === 'relative') {
+                sliceVP = octets[ pos ];
+                result.VP = tokens.VPrelative( sliceVP );
+            }
+            else if (pduType.TP_VPF.match( /^(absolute|relative)$/ )) {
+                sliceVP = octets.slice( pos, pos + 7 );
+                result.VP = tokens.SCTS( sliceVP );
+                pos += 6;
+            }
+        }
+    }
+
+    pos ++;
+    var TP_UDL = tokens.UDL( octets[ pos ], TP_DCS.alphabet );
+    result.UDL = TP_UDL;
+
+    var TP_UDHL = {};
+    var TP_UDH = {};
+    if (pduType.TP_UDHI) {
+        pos++;
+        TP_UDHL = tokens.UDHL( octets[ pos ], TP_DCS.alphabet );
+
+        pos++;
+        TP_UDH = tokens.UDH( octets.slice( pos, pos + TP_UDHL.length ) );
+        pos += TP_UDHL.length - 1;
+    }
+    
+    result.UDHL = TP_UDHL;
+    result.UDH  = TP_UDH;
+
+    pos++;
+    var expectedMsgEnd = pos + TP_UDL.octets - (TP_UDHL.length ? TP_UDHL.length + 1 : 0);
+    var sliceMessage = octets.slice( pos, expectedMsgEnd );
+
+    if (TP_UDH.wap) {
+        // TODO
+        // var wapMessage = wapDecoder( sliceMessage );
+        // tokenList.push( function(){ return 'User Data\tWireless Session Protocol (WSP) / WBXML ' + wapMessage; } );
+    }
+    else {
+        result.UD = tokens.UD( sliceMessage, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
+
+        if (expectedMsgEnd < octets.length) {
+            // tokenList.push( function(){ return 'VIOLATION\tPDU longer than expected!'; } );
+            console.error ('PDU longer than expected!');
+
+            var sliceMessageAll = octets.slice( pos, octets.length );
+            result.UD = tokens.UD( sliceMessageAll, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
+
+        }
+        else if (expectedMsgEnd > octets.length) {
+            console.error ('PDU shorter than expected!');
+            // tokenList.push( function(){ return 'VIOLATION\tPDU shorter than expected!'; } );
+        }
+    }
+
+    return result;
+}
+
 var tokens = {
 
     /**
@@ -1278,4 +1454,7 @@ var gsm7bit = {
     }
 };
 
-module.exports = pduDecoder;
+module.exports = {
+    destructure: pduDestructure,
+    decoder: pduDecoder
+};
