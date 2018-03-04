@@ -976,6 +976,7 @@ var tokens = {
             isEMS = false,
             formatting = [],
             ems = [],
+            parts = {},
             style,
             format,
             color;
@@ -1056,12 +1057,33 @@ var tokens = {
 
             // Concatenation IE
             else if (IEs[ i ].IEI === 0) {
-                text = 'Concatenated message: reference number ' + IEs[ i ].IED[0] + ', part ' + IEs[ i ].IED[2] + ' of ' + IEs[ i ].IED[1] + ' parts';
+                parts.ref   = IEs[ i ].IED[0];
+                parts.part  = IEs[ i ].IED[2];
+                parts.total = IEs[ i ].IED[1];
+                
+                text = 'Concatenated message: reference number ' + parts.ref + ', part ' + parts.part + ' of ' + parts.total + ' parts';
 
                 if (IEs[ i ].IEDL !== 3) {
                     text += ' (VIOLATON: This Information Element should have exactly 3 bytes but says it has ' + IEs[ i ].IEDL + ' instead!)';
                 }
                 if (IEs[i].IED.length !== 3) {
+                    text += ' (VIOLATION: This Information Element should have exactly 3 bytes but actually has ' + IEs[i].IED.length + ' instead!)';
+                }
+
+                info.push( text );
+            }
+            
+            else if (IEs[ i ].IEI === 8) {
+                parts.ref   = IEs[ i ].IED[0] * 256 + IEs[ i ].IED[1];
+                parts.part  = IEs[ i ].IED[3];
+                parts.total = IEs[ i ].IED[2];
+                
+                text = 'Concatenated message: 16bit reference number ' + parts.ref + ', part ' + parts.part + ' of ' + parts.total + ' parts';
+
+                if (IEs[ i ].IEDL !== 4) {
+                    text += ' (VIOLATON: This Information Element should have exactly 3 bytes but says it has ' + IEs[ i ].IEDL + ' instead!)';
+                }
+                if (IEs[i].IED.length !== 4) {
                     text += ' (VIOLATION: This Information Element should have exactly 3 bytes but actually has ' + IEs[i].IED.length + ' instead!)';
                 }
 
@@ -1235,7 +1257,13 @@ var tokens = {
             info.push( 'has EMS formatting' );
         }
 
-        return {wap: isWap, formatting: formatting, info: info.join( '; ' )};
+        return {
+            wap: isWap,
+            formatting: formatting,
+            info: info.join( '; ' ),
+            IEs: IEs,
+            parts: parts
+        };
     },
 
     /**
