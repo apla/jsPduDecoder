@@ -6,7 +6,7 @@
  * @return {Array|string} Decoded information from PDU as one dimensional array, description and information split through '\t'
  * or error string if not a valid PDU
  */
-function pduDecoder( pdu ) {
+function decodePdu( pdu ) {
     var i,
         result = [];
 
@@ -197,7 +197,7 @@ function tokenizer( octets ) {
  * @return {Object} Decoded information from PDU
  * @throws {Error} Invalid PDU string
  */
-function pduDestructure( pdu ) {
+function destructurePdu( pdu ) {
     var i;
 
     var octets = splitter( pdu );
@@ -206,7 +206,7 @@ function pduDestructure( pdu ) {
         return "Invalid PDU String!";
     }
 
-    var result = parser( octets );
+    var result = destructureOctets( octets );
 
     return result;
 }
@@ -217,7 +217,7 @@ function pduDestructure( pdu ) {
  * @param {Array<string>} octets
  * @return {Object} PDU structure
  */
-function parser( octets ) {
+function destructureOctets( octets ) {
     var result = {};
     var pos;
     var numberLength;
@@ -585,6 +585,7 @@ var tokens = {
             type: deliver ? 'deliver' : (submit ? 'submit' : ''),
             TP_UDHI: TP_UDHI,
             TP_VPF: TP_VPF,
+            flags: flags,
             info: text
         };
     },
@@ -1483,6 +1484,6 @@ var gsm7bit = {
 };
 
 module.exports = {
-    destructure: pduDestructure,
-    decoder: pduDecoder
+    destructure: destructurePdu,
+    decode: decodePdu
 };
