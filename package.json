@@ -18,12 +18,12 @@
     "Decoder"
   ],
   "author": "Benjamin Erhart",
-  "license": "GPL-3.0",
+  "license": "(GPL-3.0 OR Artistic-2.0)",
   "devDependencies": {
     "browserify": "^11.0.1",
     "clean-css": "^3.4.1",
     "dev-server": "0.0.2",
-    "jquery": "^2.1.4",
+    "jquery": "^3.0.0",
     "uglifyify": "^3.0.1"
   }
 }
