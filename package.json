@@ -6,7 +6,8 @@
   "scripts": {
     "bundle-js": "node_modules/browserify/bin/cmd.js -g uglifyify source/jspdudecoder.js -o source/bundle.js",
     "bundle-css": "node_modules/clean-css/bin/cleancss source/jspdudecoder.css -o source/bundle.css",
-    "serve": "DEV_SERVER_ROOT=source/ node_modules/dev-server/bin/dev-server"
+    "serve": "DEV_SERVER_ROOT=source/ node_modules/dev-server/bin/dev-server",
+    "test": "mocha --require reify"
   },
   "repository": {
     "type": "git",
@@ -19,11 +20,15 @@
   ],
   "author": "Benjamin Erhart",
   "license": "(GPL-3.0 OR Artistic-2.0)",
+  "dependencies": {
+    "reify": "^0.14.2"
+  },
   "devDependencies": {
     "browserify": "^11.0.1",
     "clean-css": "^3.4.1",
     "dev-server": "0.0.2",
     "jquery": "^3.0.0",
+    "mocha": "^3.5.3",
     "uglifyify": "^3.0.1"
   }
 }
