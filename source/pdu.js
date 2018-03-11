@@ -197,7 +197,7 @@ function tokenizer( octets ) {
  * @return {Object} Decoded information from PDU
  * @throws {Error} Invalid PDU string
  */
-function destructurePdu( pdu ) {
+function destructurePdu( pdu, verbose ) {
     var i;
 
     var octets = splitter( pdu );
@@ -342,7 +342,7 @@ function destructureOctets( octets, verbose ) {
 
     pos ++;
     var TP_UDL = tokens.UDL( octets[ pos ], TP_DCS.alphabet );
-    result.UDL = TP_UDL;
+    // result.UDL = TP_UDL;
 
     var TP_UDHL = {};
     var TP_UDH = {};
@@ -354,9 +354,16 @@ function destructureOctets( octets, verbose ) {
         TP_UDH = tokens.UDH( octets.slice( pos, pos + TP_UDHL.length ) );
         pos += TP_UDHL.length - 1;
     }
-    
-    result.UDHL = TP_UDHL;
-    result.UDH  = TP_UDH;
+
+    // result.UDHL = TP_UDHL;
+    result.userDataHeader  = {};
+    for (var k in TP_UDH) {
+        if (k === 'IEs' && !verbose)
+            continue;
+        if (k === 'info' && !verbose)
+            continue;
+        result.userDataHeader[k] = TP_UDH[k];
+    }
 
     pos++;
     var expectedMsgEnd = pos + TP_UDL.octets - (TP_UDHL.length ? TP_UDHL.length + 1 : 0);
@@ -473,7 +480,7 @@ var tokens = {
         text += ', ';
 
         if (NPI === 0) {
-            text += 'Unknown';
+            text += 'Unknown numbering plan';
         }
         else if (NPI === 1) {
             text += 'ISDN/telephone numbering plan (E.164/E.163)';
@@ -1113,7 +1120,7 @@ var tokens = {
                 parts.ref   = IEs[ i ].IED[0];
                 parts.part  = IEs[ i ].IED[2];
                 parts.total = IEs[ i ].IED[1];
-                
+
                 text = 'Concatenated message: reference number ' + parts.ref + ', part ' + parts.part + ' of ' + parts.total + ' parts';
 
                 if (IEs[ i ].IEDL !== 3) {
@@ -1125,12 +1132,12 @@ var tokens = {
 
                 info.push( text );
             }
-            
+
             else if (IEs[ i ].IEI === 8) {
                 parts.ref   = IEs[ i ].IED[0] * 256 + IEs[ i ].IED[1];
                 parts.part  = IEs[ i ].IED[3];
                 parts.total = IEs[ i ].IED[2];
-                
+
                 text = 'Concatenated message: 16bit reference number ' + parts.ref + ', part ' + parts.part + ' of ' + parts.total + ' parts';
 
                 if (IEs[ i ].IEDL !== 4) {
@@ -1310,13 +1317,16 @@ var tokens = {
             info.push( 'has EMS formatting' );
         }
 
-        return {
-            wap: isWap,
-            formatting: formatting,
-            info: info.join( '; ' ),
-            IEs: IEs,
-            parts: parts
-        };
+        var result = {};
+
+        if (isWap) result.wap = true;
+        if (formatting.length) result.formatting = formatting;
+        if (1) result.IEs = IEs;
+        if (Object.keys (parts).length) result.parts = parts;
+        if (1) result.info = info.join( '; ' );
+
+        return result;
+
     },
 
     /**
