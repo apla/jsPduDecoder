@@ -368,14 +368,14 @@ function destructureOctets( octets, verbose ) {
         // tokenList.push( function(){ return 'User Data\tWireless Session Protocol (WSP) / WBXML ' + wapMessage; } );
     }
     else {
-        result.UD = tokens.UD( sliceMessage, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
+        result.userData = tokens.UD( sliceMessage, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
 
         if (expectedMsgEnd < octets.length) {
             // tokenList.push( function(){ return 'VIOLATION\tPDU longer than expected!'; } );
             console.error ('PDU longer than expected!');
 
             var sliceMessageAll = octets.slice( pos, octets.length );
-            result.UD = tokens.UD( sliceMessageAll, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
+            result.userData = tokens.UD( sliceMessageAll, TP_DCS.alphabet, TP_UDHL.padding, TP_UDH.formatting );
 
         }
         else if (expectedMsgEnd > octets.length) {
