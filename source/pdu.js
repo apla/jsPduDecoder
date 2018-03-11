@@ -212,12 +212,33 @@ function destructurePdu( pdu ) {
 }
 
 /**
+ * converts timestamp to date object
+ */
+function timestampToDate (ts) {
+    var chunks = ts.split (' ');
+    var stringTz, tz = parseInt (chunks[3], 10);
+    if (tz > -10 && tz < 0) {
+        stringTz = '-0' + Math.abs (tz)
+    } else if (tz > 0 && tz < 10) {
+        stringTz = '+0' + tz
+    } else if (tz > 9) {
+        stringTz = '+' + tz
+    } else {
+        stringTz = tz.toString();
+    }
+    return {
+        tz: stringTz,
+        date: new Date (Date.parse (chunks[0] + 'T' + chunks[1] + 'Z') - tz*60*60*1000)
+    };
+}
+
+/**
  * Analyses the PDU octets and returns a PDU internal structures.
  *
  * @param {Array<string>} octets
  * @return {Object} PDU structure
  */
-function destructureOctets( octets ) {
+function destructureOctets( octets, verbose ) {
     var result = {};
     var pos;
     var numberLength;
