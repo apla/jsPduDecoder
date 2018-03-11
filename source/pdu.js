@@ -131,14 +131,14 @@ function tokenizer( octets ) {
         TP_DCS = tokens.DCS( octets[ pos ] );
         tokenList.push( function(){ return '(hideable)Data Coding Scheme\t' + TP_DCS.info; } );
 
-        if (pduType.TP_VPF) {
+        if (pduType.flags['TP-VPF']) {
             pos++;
             var sliceVP;
-            if (pduType.TP_VPF === 'relative') {
+            if (pduType.flags['TP-VPF'] === 'relative') {
                 sliceVP = octets[ pos ];
                 tokenList.push( function(){ return '(hideable)Validity Period\t' + tokens.VPrelative( sliceVP ); } );
             }
-            else if (pduType.TP_VPF.match( /^(absolute|relative)$/ )) {
+            else if (pduType.flags['TP-VPF'].match( /^(absolute|relative)$/ )) {
                 sliceVP = octets.slice( pos, pos + 7 );
                 tokenList.push( function(){ return '(hideable)Validity Period\tuntil ' + tokens.SCTS( sliceVP ); } );
                 pos += 6;
@@ -152,7 +152,7 @@ function tokenizer( octets ) {
 
     var TP_UDHL = {};
     var TP_UDH = {};
-    if (pduType.TP_UDHI) {
+    if (pduType.flags['TP-UDHI']) {
         pos++;
         TP_UDHL = tokens.UDHL( octets[ pos ], TP_DCS.alphabet );
         tokenList.push( function() { return 'User Data Header Length\t' + TP_UDHL.info; } );
@@ -234,85 +234,86 @@ function destructureOctets( octets ) {
         var sliceSmsc = octets.slice( 2, smscLength + 1 );
         var sliceSmscToA = octets[1];
         var smscToA = tokens.ToA( sliceSmscToA );
-        result.SMSC = {
-            number: tokens.Number( sliceSmsc, undefined, smscToA ),
-            ToA: smscToA,
+        // SMSC
+        result.smsCentre = {
+            number: tokens.Number( sliceSmsc, undefined, smscToA )
         };
+        if (verbose)
+            result.smsCentre.ToA = smscToA;
+        Object.defineProperty (result, 'smsCenter', {writable: true, value: result.smsCentre});
     }
 
     // Sender/Receiver part
     pos = smscLength + 1;
-    var pduType = result.ToM = tokens.ToM( octets[ pos ] );
+    var pduType = tokens.ToM( octets[ pos ] );
+
+    result.typeOfMessage  = {};
+    for (var k in pduType) {
+        if (k === 'info' && !verbose)
+            continue;
+        result.typeOfMessage[k] = pduType[k];
+    }
 
     if (pduType.type === 'deliver') {
         pos++;
         numberLength = parseInt( octets[ pos ], 16 );
 
         pos++;
-        if (numberLength) {
-            sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
-            sliceNumberToA = octets[ pos ];
-            numberToA = tokens.ToA( sliceNumberToA );
-            result.address = {
-                number: tokens.Number( sliceNumber, numberLength, numberToA ),
-                ToA: numberToA,
-            };
-
-            pos += 1 + Math.ceil( numberLength / 2 );
-        }
-
-        TP_PID = octets[ pos ];
-        result.PID = tokens.PID( TP_PID );
-
-        pos++;
-        TP_DCS = tokens.DCS( octets[ pos ] );
-        result.DCS = tokens.DCS( octets[ pos ] );
-
-        pos++;
-        var sliceTimeStamp = octets.slice( pos, pos + 7 );
-        result.SCTS = tokens.SCTS( sliceTimeStamp );
-
-        pos += 6;
-    }
-    else if (pduType.type === 'submit') {
+    } else if (pduType.type === 'submit') {
         pos++;
         var MR = octets[ pos ];
-        result.MR = tokens.MR( MR );
+        result.messageReference = tokens.MR( MR );
 
         pos++;
         numberLength = parseInt( octets[ pos ], 16 );
 
         pos++;
-        if (numberLength) {
-            sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
-            sliceNumberToA = octets[ pos ];
-            numberToA = tokens.ToA( sliceNumberToA );
-            // TP-DA
-            result.address = {
-                number: tokens.Number( sliceNumber, numberLength, numberToA ),
-                ToA: numberToA,
-            };
+    }
 
-            pos += 1 + Math.ceil( numberLength / 2 );
-        }
+    if (numberLength) {
+        sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
+        sliceNumberToA = octets[ pos ];
+        numberToA = tokens.ToA( sliceNumberToA );
+        // TP-DA
+        result.address = {
+            number: tokens.Number( sliceNumber, numberLength, numberToA ),
+        };
+        if (verbose)
+            result.address.ToA = numberToA;
 
-        TP_PID = octets[ pos ];
-        result.PID = tokens.PID( TP_PID );
+        pos += 1 + Math.ceil( numberLength / 2 );
+    }
 
+    TP_PID = octets[ pos ];
+    result.protocolIdentifier = tokens.PID( TP_PID );
+
+    pos++;
+    TP_DCS = tokens.DCS( octets[ pos ] );
+    result.messageHandling = {};
+    for (var k in TP_DCS) {
+        if (!verbose && k === 'info')
+            continue;
+        result.messageHandling[k] = TP_DCS[k];
+    }
+
+    if (pduType.type === 'deliver') {
         pos++;
-        TP_DCS = tokens.DCS( octets[ pos ] );
-        result.DCS = tokens.DCS( octets[ pos ] );
-        
-        if (pduType.TP_VPF) {
+        var sliceTimeStamp = octets.slice( pos, pos + 7 );
+        result.serviceCentreTimestamp = timestampToDate (tokens.SCTS( sliceTimeStamp ));
+        Object.defineProperty (result, 'serviceCenterTimestamp', {writable: true, value: result.serviceCentreTimestamp});
+
+        pos += 6;
+    } else if (pduType.type === 'submit') {
+        if (pduType.flags['TP-VPF']) {
             pos++;
             var sliceVP;
-            if (pduType.TP_VPF === 'relative') {
+            if (pduType.flags['TP-VPF'] === 'relative') {
                 sliceVP = octets[ pos ];
-                result.VP = tokens.VPrelative( sliceVP );
+                result.validityPeriod = tokens.VPrelative( sliceVP );
             }
-            else if (pduType.TP_VPF.match( /^(absolute|relative)$/ )) {
+            else if (pduType.flags['TP-VPF'].match( /^(absolute|relative)$/ )) {
                 sliceVP = octets.slice( pos, pos + 7 );
-                result.VP = tokens.SCTS( sliceVP );
+                result.validityPeriod = timestampToDate (tokens.SCTS( sliceVP ));
                 pos += 6;
             }
         }
@@ -324,7 +325,7 @@ function destructureOctets( octets ) {
 
     var TP_UDHL = {};
     var TP_UDH = {};
-    if (pduType.TP_UDHI) {
+    if (pduType.flags['TP-UDHI']) {
         pos++;
         TP_UDHL = tokens.UDHL( octets[ pos ], TP_DCS.alphabet );
 
@@ -506,11 +507,20 @@ var tokens = {
         var o = parseInt( octet, 16 );
         var TP_MTI_mask = 0x1; //0x3;
         var text = '';
-        var flags = [];
+        var flags = {};
         var deliver = false;
         var submit =false;
         var TP_VPF = null;
-        var TP_UDHI = false;
+
+        var descriptions = {
+            'TP-RP':   'Reply path exists',
+            'TP-UDHI': 'User data header indicator',
+            'TP-SRR':  'Status report request',
+            'TP-VPF':  'Validity Period Format',
+            'TP-RD':   'Reject duplicates',
+            'TP-SRI':  'Status report indication',
+            'TP-MMS':  'More messages to send'
+        };
 
         if ((o & TP_MTI_mask) === 0) {
             text += 'SMS-DELIVER';
@@ -526,18 +536,18 @@ var tokens = {
 
         // noinspection JSBitwiseOperatorUsage
         if (o & 0x80) {
-            flags.push( 'TP-RP (Reply path exists)' );
+            flags['TP-RP'] = true;
+
         }
         // noinspection JSBitwiseOperatorUsage
         if (o & 0x40) {
-            TP_UDHI = true;
-            flags.push( 'TP-UDHI (User data header indicator)' );
+            flags['TP-UDHI'] = true;
         }
 
         if (submit) {
             // noinspection JSBitwiseOperatorUsage
             if (o & 0x20) {
-                flags.push( 'TP-SRR (Status report request)' );
+                flags['TP-SRR'] = true;
             }
 
 
@@ -549,42 +559,43 @@ var tokens = {
             }
             else if (TP_VPF_mask === 8) {
                 TP_VPF = 'enhanced';
-                flags.push( vpfText + 'enhanced format' );
+                flags['TP-VPF'] = 'enhanced';
             }
             else if (TP_VPF_mask === 0x10) {
                 TP_VPF = 'relative';
-                flags.push( vpfText + 'relative format' );
+                flags['TP-VPF'] = 'relative';
             }
             else if (TP_VPF_mask === 0x18) {
                 TP_VPF = 'absolute';
-                flags.push( vpfText + 'absolute format' );
+                flags['TP-VPF'] = 'absolute';
             }
 
 
             if ((o & 0x4) === 0) {
-                flags.push( 'TP-RD (Reject duplicates)' );
+                flags['TP-RD'] = true;
             }
         }
         else if (deliver) {
             // noinspection JSBitwiseOperatorUsage
             if (o & 0x20) {
-                flags.push( 'TP-SRI (Status report indication)' );
+                flags['TP-SRI'] = true;
             }
 
             if ((o & 0x4) === 0) {
-                flags.push( 'TP-MMS (More messages to send)' );
+                flags['TP-MMS'] = true;
             }
         }
 
-        if (flags.length) {
-            text += ', Flags: ' + flags.join( ', ' );
+        if (Object.keys(flags).length) {
+            text += ', Flags: ' + Object.keys (flags).map(function (flag) {
+                return flag + ' (' + descriptions[flag] + ')' + (flags[flag] !== true ? ': ' + flags[flag] : '')
+            }).join( ', ' );
         }
 
 
         return {
             type: deliver ? 'deliver' : (submit ? 'submit' : ''),
-            TP_UDHI: TP_UDHI,
-            TP_VPF: TP_VPF,
+            // TP_VPF: TP_VPF,
             flags: flags,
             info: text
         };
