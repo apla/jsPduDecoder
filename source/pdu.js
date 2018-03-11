@@ -758,6 +758,7 @@ var tokens = {
         var text = '';
         var alphabet = 'default';
         var codingGroup = o & 0xF0;
+        var result = {};
 
         if (codingGroup >= 0 && codingGroup <= 0x30) {
             text += 'General Data Coding groups, ';
@@ -792,12 +793,15 @@ var tokens = {
             text += 'Reserved coding groups';
         }
         else if (codingGroup === 0xC0) {
+            result.action = 'discard';
             text += 'Message Waiting Indication Group: Discard Message, ';
         }
         else if (codingGroup === 0xD0) {
+            result.action = 'store';
             text += 'Message Waiting Indication Group: Store Message, standard encoding, ';
         }
         else if (codingGroup === 0xE0) {
+            result.action = 'store';
             text += 'Message Waiting Indication Group: Store Message, UCS2 encoding, ';
         }
         else if (codingGroup === 0xF0) {
@@ -821,25 +825,36 @@ var tokens = {
         if ((codingGroup >= 0 && codingGroup <= 0x30) || codingGroup === 0xF0) {
             text += ', ';
 
+            var isMsgClassSet = true;
+
             if ((codingGroup >= 0 && codingGroup <= 0x30) && (o & 0x10) === 0) {
+                isMsgClassSet = false;
                 text += ' no message class set (but given bits would be: ';
             }
 
-            var msgClass = o & 3;
+            var msgClassId = o & 3;
 
-            text += 'Class ' + msgClass + ' - ';
+            text += 'Class ' + msgClassId + ' - ';
 
-            if (msgClass === 0) {
+            if (msgClassId === 0) {
+                result.class = 'Flash';
                 text += 'immediate display';
             }
-            else if (msgClass === 1) {
+            else if (msgClassId === 1) {
+                result.class = 'ME';
                 text += 'ME specific';
             }
-            else if (msgClass === 2) {
+            else if (msgClassId === 2) {
+                result.class = 'SIM';
                 text += 'SIM specific';
             }
-            else if (msgClass === 3) {
+            else if (msgClassId === 3) {
+                result.class = 'TE';
                 text += 'TE specific';
+            }
+
+            if (!isMsgClassSet) {
+                result.class = undefined;
             }
 
             text += ')';
@@ -849,9 +864,11 @@ var tokens = {
         if (codingGroup >= 0xC0 && codingGroup <= 0xE0) {
             // noinspection JSBitwiseOperatorUsage
             if (o & 8) {
+                result.active = true;
                 text += 'Set Indication Active';
             }
             else {
+                result.active = false;
                 text += 'Set Indication Inactive';
             }
 
@@ -865,23 +882,26 @@ var tokens = {
             var indicationType = o & 3;
 
             if (indicationType === 0) {
+                result.unread = 'Voicemail';
                 text += 'Voicemail Message Waiting';
             }
             else if (indicationType === 1) {
+                result.unread = 'Fax';
                 text += 'Fax Message Waiting';
             }
             else if (indicationType === 2) {
+                result.unread = 'E-mail';
                 text += 'E-Mail Message Waiting';
             }
             else if (indicationType === 3) {
+                result.unread = 'Other';
                 text += 'Other Message Waiting (not yet standardized)';
             }
         }
 
-        return {
-            alphabet: alphabet,
-            info: text
-        };
+        result.alphabet = alphabet;
+
+        return result;
     },
 
     /**
