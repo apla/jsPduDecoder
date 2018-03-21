@@ -1662,7 +1662,7 @@ function stringify (message) {
  * @param {number?} padding in no. of bits from UDHL (optional)
  * @returns {string} the readable content of the given octets.
  */
-export function decode7Bit( octets, padding ) {
+function decode7Bit( octets, padding ) {
     var thisAndNext, thisChar, character,
         nextChar = '',
         text = '';
