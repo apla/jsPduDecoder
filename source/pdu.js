@@ -115,6 +115,7 @@ function tokenizer( octets ) {
         numberLength = parseInt( octets[ pos ], 16 );
 
         pos++;
+
         if (numberLength) {
             sliceNumber = octets.slice( pos + 1, pos + 1 + Math.ceil( numberLength / 2 ) );
             sliceNumberToA = octets[ pos ];
@@ -197,7 +198,7 @@ function tokenizer( octets ) {
  * @return {Object} Decoded information from PDU
  * @throws {Error} Invalid PDU string
  */
-function destructurePdu( pdu, verbose ) {
+function parsePdu( pdu, verbose ) {
     var i;
 
     var octets = splitter( pdu );
@@ -206,7 +207,7 @@ function destructurePdu( pdu, verbose ) {
         return "Invalid PDU String!";
     }
 
-    var result = destructureOctets( octets );
+    var result = parseOctets( octets );
 
     return result;
 }
@@ -238,7 +239,7 @@ function timestampToDate (ts) {
  * @param {Array<string>} octets
  * @return {Object} PDU structure
  */
-function destructureOctets( octets, verbose ) {
+function parseOctets( octets, verbose ) {
     var result = {};
     var pos;
     var numberLength;
@@ -1432,13 +1433,236 @@ var tokens = {
 };
 
 /**
+ * Encode text to GSM-7 encoding
+ * @param   {[[Type]]} inTextNumberArray [[Description]]
+ * @param   {[[Type]]} [paddingBits=0]   [[Description]]
+ * @returns {[[Type]]} [[Description]]
+ */
+function encode7Bit (inTextNumberArray, paddingBits) {
+    //as explained here http://mobiletidings.com/2009/07/06/how-to-pack-gsm7-into-septets/
+    var paddingBits = paddingBits || 0;
+    var bits = 0;
+    var out = "";
+
+    if (paddingBits) {
+            bits = 7 - paddingBits;
+            var octet = (inTextNumberArray[0] << (7 - bits)) % 256
+            out += ('00' + octet.toString(16)).slice(-2); // zero padded
+            bits++;
+        }
+
+    for(var i = 0; i < inTextNumberArray.length; i++ ) {
+        if (bits == 7) {
+            bits = 0;
+            continue;
+        }
+        var octet = (inTextNumberArray[i] & 0x7f) >> bits;
+        if (i < inTextNumberArray.length - 1 ) {
+            octet |= (inTextNumberArray[i + 1] << (7 - bits)) % 256;
+        }
+        out += ('00' + octet.toString(16)).slice(-2); // zero padded
+        bits++;
+    }
+    return out.toUpperCase();
+}
+
+function try7Bit (message) {
+    //7bit GSM encoding according to GSM_03.38 character set http://en.wikipedia.org/wiki/GSM_03.38
+    var data = [];
+    var is7Bits = message.split ('').every (function (char) {
+        var int = gsm7Reverse[char];
+        if (int === undefined)
+            return false;
+        data = data.concat (int);
+        return true;
+    });
+    if (!is7Bits)
+        return;
+    return data;
+}
+
+function encodeAddress (address) {
+    var addressFormat = "81"; // national
+    if (address[0] === '+') {
+        addressFormat = "91"; // international
+        address = address.substr(1);
+    } else if (address[0] !== '0') {
+        // addressFormat = "91"; // international
+    }
+
+    /*
+    The Address-Length field is an integer representation of the number
+    of useful semi-octets within the Address-Value field,
+    i.e. excludes any semi octet containing only fill bits.
+    */
+    var addressLength = address.length.toString(16).toUpperCase ();
+    if (addressLength.length < 2)
+        addressLength = '0' + addressLength;
+
+    if (address.length % 2) {
+      address += "F";
+    }
+
+    var encoded = address.split ('').map (function (char, idx, chars) {
+        if (idx % 2) return '';
+        return chars[idx + 1] + char;
+    });
+
+    return [].concat (addressLength, addressFormat, encoded).join ('');
+
+}
+
+function encode16Bit (data) {
+    var out = '';
+    for(var i = 0; i < data.length; i++) {
+        out += ('0000'+(data[i].toString(16))).slice(-4);
+    }
+    return out;
+}
+
+function randomHexa (size) {
+    var text = "";
+    var possible = "0123456789ABCDEF";
+    while (text.length < size) {
+        text += possible[Math.floor(Math.random() * (possible.length - 1))];
+    }
+    return text;
+}
+
+
+function stringify (message) {
+    var pdu = '00'; // SCA = Service Centre Address
+    var parts = 1;
+
+    var msgCharcodeArray = try7Bit (message.userData);
+    var encoding = 'default';
+
+    if (!msgCharcodeArray) {
+        msgCharcodeArray = message.userData.split ('').map (function (char) {return char.charCodeAt (0)});
+        encoding = 'ucs2';
+    }
+
+    if(encoding === 'ucs2' && msgCharcodeArray.length > 70)
+        parts = msgCharcodeArray.length / 66;
+
+    else if(encoding === 'default' && msgCharcodeArray.length > 160)
+        parts = msgCharcodeArray.length / 153;
+
+    parts = Math.ceil(parts);
+
+    var TPMTI  = 1,
+        TPRD   = 4,
+        TPVPF  = 8,
+        TPSRR  = 32,
+        TPUDHI = 64,
+        TPRP   = 128;
+
+    var submit = TPMTI;
+
+    if(parts > 1) //UDHI
+        submit = submit | TPUDHI;
+
+    submit = submit | TPSRR;
+
+    pdu += submit.toString(16);
+
+    pdu += '00'; //TODO: Reference Number;
+    /*
+    The TP-Message-Reference field gives an integer representation of a reference number of the SMS-SUBMIT or SMS-COMMAND submitted to the SC by the MS. The MS increments TP-Message-Reference by 1 for each SMS-SUBMIT or SMS-COMMAND being submitted. The value to be used for each SMS-SUBMIT is obtained by reading the Last-Used-TP-MR value from the SMS Status data field in the SIM (see TS GSM 11.11) and incrementing this value by 1. After each SMS-SUBMIT has been submitted to the network, the Last-Used-TP-MR value in the SIM is updated with the TP-MR that was used in the SMS-SUBMIT operation. The reference number may possess values in the range 0 to 255. The value in the TP-MR assigned by the MS is the same value which is received at the SC.
+    */
+
+
+    pdu += encodeAddress (message.address);
+
+    // pdu += receiverSize.toString(16) + receiverType + receiver;
+
+    pdu += '00'; //TODO TP-PID
+
+    /*
+    0 to 143: (TP-VP + 1) x 5 minutes (i.e. 5 minutes intervals up to 12 hours)
+
+    144 to 167: 12 hours + ((TP-VP -143) x 30 minutes)
+
+    168 to 196: (TP-VP - 166) x 1 day
+
+    197 to 255: (TP-VP - 192) x 1 week
+    */
+
+    if(encoding === 'ucs2')
+        pdu += '08';
+    else if(encoding === 'default')
+        pdu += '00';
+
+    var pdus = new Array();
+
+    var csms = randomHexa(2); // CSMS allows to give a reference to a concatenated message
+
+    for(var i=0; i< parts; i++) {
+        pdus[i] = pdu;
+
+        if(encoding === 'ucs2') {
+            /* If there are more than one messages to be sent, we are going to have to put some UDH. Then, we would have space only
+             * for 66 UCS2 characters instead of 70 */
+            if(parts === 1)
+                var length = 70;
+            else
+                var length = 66;
+
+        } else if(encoding === 'default') {
+            /* If there are more than one messages to be sent, we are going to have to put some UDH. Then, we would have space only
+             * for 153 ASCII characters instead of 160 */
+            if(parts === 1)
+                var length = 160;
+            else
+                var length = 153;
+        }
+        var text = msgCharcodeArray.slice(i*length, (i*length)+length);
+
+        var userData;
+
+        if(encoding === 'ucs2') {
+            userData = encode16Bit(text);
+            var size = (userData.length / 2);
+
+            if(parts > 1)
+                size += 6; //6 is the number of data headers we append.
+
+        } else if(encoding === 'default') {
+            if(parts > 1){
+                userData = encode7Bit(text,1);
+                var size = 7 + text.length;
+            }
+            else {
+                userData = encode7Bit(text);
+                var size = text.length;
+            }
+        }
+
+        pdus[i] += ('00'+parseInt(size).toString(16)).slice(-2);
+
+        if(parts > 1) {
+            pdus[i] += '05';
+            pdus[i] += '00';
+            pdus[i] += '03';
+            pdus[i] +=  csms;
+            pdus[i] += ('00'+parts.toString(16)).slice(-2);
+            pdus[i] += ('00'+(i+1).toString(16)).slice(-2);
+        }
+        pdus[i] += userData;
+    }
+
+    return pdus;
+}
+
+
+/**
  * Decodes all given octets to a string using the GSM 7-bit encoding.
  *
  * @param {Array<string>} octets
  * @param {number?} padding in no. of bits from UDHL (optional)
  * @returns {string} the readable content of the given octets.
  */
-function decode7Bit( octets, padding ) {
+export function decode7Bit( octets, padding ) {
     var thisAndNext, thisChar, character,
         nextChar = '',
         text = '';
@@ -1541,11 +1765,26 @@ var gsm7bit = {
     27: {
         10: '\n', // Should be FORM-FEED but no good here
         20: '^', 40: '{', 41: '}', 47: '\\',
-        60: '[', 61: '~', 62: ']', 64: '|', 101: '&#8364;'
+        60: '[', 61: '~', 62: ']', 64: '|', 101: '\u20ac' // €
     }
 };
 
+var gsm7Reverse = {};
+Object.keys (gsm7bit).forEach (function (charCode) {
+    if (charCode !== 27)
+        gsm7Reverse[gsm7bit[charCode]] = charCode;
+});
+
+Object.keys (gsm7bit[27]).forEach (function (charCode) {
+    gsm7Reverse[gsm7bit[27][charCode]] = [27, charCode];
+});
+
+
 module.exports = {
-    destructure: destructurePdu,
-    decode: decodePdu
+    parse:   parsePdu,
+    decode:        decodePdu,
+    encodeAddress: encodeAddress,
+    encode7Bit:    encode7Bit,
+    try7Bit:       try7Bit,
+    stringify:     stringify,
 };

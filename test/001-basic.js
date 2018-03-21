@@ -1,4 +1,4 @@
-import {destructure, decode} from '../source/pdu.js';
+import {parse, decode} from '../source/pdu.js';
 
 import assert from 'assert';
 
@@ -37,7 +37,7 @@ describe ('pdu decoder', function () {
 		assert (details[7].indexOf ('2017-08-24 18:14:43 GMT +3'));
 		assert (details[11].indexOf ('На основании прогноза ФГБУ «Центральное УГМС» 24 августа в Москве '));
 
-		var structure = destructure (pdu);
+		var structure = parse (pdu);
 
 		// console.log (JSON.stringify (structure, null, '\t'));
 
@@ -72,7 +72,7 @@ describe ('pdu decoder', function () {
 		assert (details[6].indexOf ('4 days'));
 		assert (details[8].indexOf ('hellohello'));
 
-		var structure = destructure (pdu);
+		var structure = parse (pdu);
 
 		// console.log (JSON.stringify (structure, null, '\t'));
 
@@ -95,7 +95,7 @@ describe ('pdu decoder', function () {
 	it ("should parse some pdu", function () {
 
 		pduStrings.forEach (pdu => {
-			var structure = destructure (pdu);
+			var structure = parse (pdu);
 
 			// console.log (JSON.stringify (structure, null, '\t'));
 
@@ -109,7 +109,7 @@ describe ('pdu decoder', function () {
 
 		// console.log (details);
 
-		var structure = destructure (pdu);
+		var structure = parse (pdu);
 
 		// console.log (JSON.stringify (structure, null, '\t'));
 
@@ -134,7 +134,7 @@ describe ('pdu decoder', function () {
 
 		// console.log (details);
 
-		var structure = destructure (pdu);
+		var structure = parse (pdu);
 
 		// console.log (JSON.stringify (structure, null, '\t'));
 
