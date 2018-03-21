@@ -2,7 +2,7 @@
   "name": "js-pdu-decoder",
   "version": "1.0.1",
   "description": "Decodes many PDU encoded SMS formats.",
-  "main": "jspdudecoder.js",
+  "main": "source/pdu.js",
   "scripts": {
     "bundle-js": "node_modules/browserify/bin/cmd.js -g uglifyify source/jspdudecoder.js -o source/bundle.js",
     "bundle-css": "node_modules/clean-css/bin/cleancss source/jspdudecoder.css -o source/bundle.css",

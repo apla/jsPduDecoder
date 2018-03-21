@@ -1,0 +1,8 @@
+dist/
+.reify-cache/
+source/bundle.js
+source/index.html
+source/jspdudecoder.css
+source/jspdudecoder.js
+source/reset.css
+source/wbxml.pl
