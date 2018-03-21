@@ -1,4 +1,4 @@
-import {destructure, decode} from '../source/pdu.js';
+import {parse, decode} from '../source/pdu.js';
 
 import pdu from 'pdu';
 
@@ -31,7 +31,7 @@ describe.only ('pdu modules', function () {
 	it ("jsPduDecoder should parse some pdu", function () {
 
 		pduStrings.forEach ((pduString, idx) => {
-			var structure = destructure (pduString);
+			var structure = parse (pduString);
 
 			if (idx === 0) {
 				assert.equal (structure.smsCentre.number, '79037011111', 'SMS Center invalid');
